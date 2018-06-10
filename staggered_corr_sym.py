@@ -73,11 +73,17 @@ def rolling_prices(symbols, months, start_date, end_date):
         else:
             break
 
+def long_bet(old_prc, new_prc):
+    return new_prc - old_prc
+
+def short_bet(old_prc, new_prc):
+    return old_prc - new_prc
+
 def place_bets(prices, predicted_direction, staggered_corrs):
     from functools import partial
 
-    long_bet = lambda old_prc, new_prc : new_prc - old_prc
-    short_bet = lambda old_prc, new_prc : old_prc - new_prc
+    # long_bet = lambda old_prc, new_prc : new_prc - old_prc
+    # short_bet = lambda old_prc, new_prc : old_prc - new_prc
     latest_prices = prices.tail(1).squeeze().to_dict()
     bets = {}
     for sc in staggered_corrs:
@@ -118,10 +124,25 @@ if __name__ == '__main__':
         staggered_corrs = get_top_corrs(prices, symbols, 3, stagger)
         predicted_directions = get_predicted_direction(prices, stagger, staggered_corrs)
         bets = place_bets(prices, predicted_directions, staggered_corrs)
+        
+        prev_prcs = prices[-2:-1].squeeze().to_dict()
+        curr_prcs = prices[-1:].squeeze().to_dict()
 
-        print("\n\nCorrelations")
+        print("\n\nProcess Details")
         for sc in staggered_corrs:
-            print("{0} : {1} => {2}, {3}".format(sc.prime_symbol, sc.staggered_symbol, sc.correlation, prices.tail(1)[sc.prime_symbol][0]))
+            
+            output = "Symbol: {0}, Prev Price:{1}, Current Price:{2}, Predicted Direction:{3}, Correlation:{4}, Bet:{5}, Gross:{6}"
+            print(output.format(sc.prime_symbol,
+                                prev_prcs[sc.prime_symbol],
+                                curr_prcs[sc.prime_symbol],
+                                predicted_directions[sc.prime_symbol],
+                                sc.correlation,
+                                bets[sc.prime_symbol].func.__name__,
+                                totals.get(sc.prime_symbol, None)))
+
+        # print("\n\nCorrelations")
+        # for sc in staggered_corrs:
+        #     print("{0} : {1} => {2}, {3}".format(sc.prime_symbol, sc.staggered_symbol, sc.correlation, prices.tail(1)[sc.prime_symbol][0]))
 
     print("\n\nTotals")
     for i, x in totals.items():
