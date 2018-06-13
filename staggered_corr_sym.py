@@ -1,5 +1,9 @@
 import pandas
 
+# Theory of using one step ahead correlations to predict price and then trading on that
+# does not seem to produce positive results
+# perhaps can pick this up later if an new idea come to mind
+
 def get_s_n_p_symbols():
         ticker_frame = pandas.read_html("https://en.wikipedia.org/wiki/List_of_S%26P_500_companies", header=0)[0]
         return list(ticker_frame['Ticker symbol'])
@@ -30,20 +34,21 @@ def extract_prices(symbols, months, end_date = None):
 def compute_staggered_corr(prices, prime_symbol, staggered_symbol, stagger):
     import numpy
     from collections import namedtuple
-    StaggeredCorr = namedtuple('StaggeredCorr', ['prime_symbol', 'staggered_symbol', 'correlation'])
+    StaggeredCorr = namedtuple('StaggeredCorr', ['prime_symbol', 'staggered_symbol', 'correlation', 'coeff_of_var'])
 
     staggered_start = prices.index[stagger]
     staggered_end = prices.index[-1 - stagger]
     correlation = numpy.corrcoef(prices.loc[staggered_start:, prime_symbol], prices.loc[:staggered_end, staggered_symbol])[1][0]
-    return StaggeredCorr(prime_symbol, staggered_symbol, correlation)
+    coeff_of_variation = prices.loc[staggered_start:, prime_symbol].std()/float(prices.loc[staggered_start:, prime_symbol].mean())
+    return StaggeredCorr(prime_symbol, staggered_symbol, correlation, coeff_of_variation)
 
 def gen_staggered_corrs(prices, symbols, stagger):
     return (compute_staggered_corr(prices, ps, ss, stagger) for ps in symbols for ss in symbols)
 
-def get_top_corrs(prices, symbols, amount = 5, stagger = 1):
+def get_top_corrs(prices, symbols, amount = 5, stagger = 1, max_cv = 0.2):
     top_corrs = []
     i = 0
-    staggered_corrs = [sc for sc in gen_staggered_corrs(prices, symbols, stagger) if not pandas.isnull(sc.correlation)]
+    staggered_corrs = [sc for sc in gen_staggered_corrs(prices, symbols, stagger) if not pandas.isnull(sc.correlation) and sc.coeff_of_var < max_cv]
     staggered_corrs = sorted(staggered_corrs, key = lambda x : abs(x.correlation), reverse = True)
     while len(top_corrs) < amount and i < len(staggered_corrs):
         if staggered_corrs[i].prime_symbol not in [tc.prime_symbol for tc in top_corrs]:
@@ -131,14 +136,17 @@ if __name__ == '__main__':
         print("\n\nProcess Details")
         for sc in staggered_corrs:
             
-            output = "Symbol: {0}, Prev Price:{1}, Current Price:{2}, Predicted Direction:{3}, Correlation:{4}, Bet:{5}, Gross:{6}"
+            #output = "Symbol: {0}, Prev Price:{1}, Current Price:{2}, Predicted Direction:{3}, Correlation:{4}, Bet:{5}, Gross:{6}, Coefficient of Variation:{7}"
+            output = "Symbol: {0}, Coefficient of Variation:{1}"
             print(output.format(sc.prime_symbol,
-                                prev_prcs[sc.prime_symbol],
-                                curr_prcs[sc.prime_symbol],
-                                predicted_directions[sc.prime_symbol],
-                                sc.correlation,
-                                bets[sc.prime_symbol].func.__name__,
-                                totals.get(sc.prime_symbol, None)))
+                                # prev_prcs[sc.prime_symbol],
+                                # curr_prcs[sc.prime_symbol],
+                                # predicted_directions[sc.prime_symbol],
+                                # sc.correlation,
+                                # bets[sc.prime_symbol].func.__name__,
+                                # totals.get(sc.prime_symbol, None),
+                                sc.coeff_of_var
+                                ))
 
         # print("\n\nCorrelations")
         # for sc in staggered_corrs:
